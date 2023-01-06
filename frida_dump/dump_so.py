@@ -50,13 +50,11 @@ def on_message(message: dict, data: bytes, target: str):
             logger.debug(message['payload'])
 
 
-def handle_exit(signum, frame):
+def handle_exit(signum, frame, script: frida.core.Script):
+    script.unload()
     sys.exit('hit handle_exit, go exit')
 
 def main():
-    # <------ 处理手动Ctrl+C退出 ------>
-    signal.signal(signal.SIGINT, handle_exit)
-    signal.signal(signal.SIGTERM, handle_exit)
     # <------ 正文 ------>
     parser = ArgumentParser(
         prog='frida_dump script',
@@ -124,7 +122,9 @@ def main():
         rpc.main(args.TARGET[0])
     else:
         rpc.dumpso(args.TARGET[0])
-
+    # <------ 处理手动Ctrl+C退出 ------>
+    signal.signal(signal.SIGINT, lambda signum, frame: handle_exit(signum, frame, script))
+    signal.signal(signal.SIGTERM, lambda signum, frame: handle_exit(signum, frame, script))
     # wait
     sys.stdin.read()
  

@@ -60,7 +60,7 @@ def main():
     # <------ 正文 ------>
     parser = ArgumentParser(
         prog='frida_dump script',
-        usage='python -m frida_dump.main [OPTION]...',
+        usage='python -m frida_dump.dump_so [OPTION]...',
         description=f'version {__version__}, frida_dump server',
         add_help=False
     )

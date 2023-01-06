@@ -117,7 +117,7 @@ def main():
         session.on('detached', on_detached)
         script.on('message', lambda message, data: on_message(message, data, args.TARGET[0]))
     except Exception as e:
-        logger.error(f'inject scrip failed', exc_info=e)
+        logger.error(f'inject script failed', exc_info=e)
         sys.exit()
     rpc = script.exports
     if args.spawn:

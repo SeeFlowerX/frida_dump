@@ -20,4 +20,5 @@ python -m frida_dump.dump_so -n 微信 libwechatcommon.so
 
 # Thanks
 
-[https://github.com/F8LEFT/SoFixer](https://github.com/F8LEFT/SoFixer)
+- [SoFixer](https://github.com/F8LEFT/SoFixer)
+- [elf-dump-fix](https://github.com/maiyao1988/elf-dump-fix)

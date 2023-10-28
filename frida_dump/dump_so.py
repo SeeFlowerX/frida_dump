@@ -16,7 +16,7 @@ logger = setup_logger('frida_dump', level='DEBUG')
 def use_sofixer(arch: str, save_name: str, so_name: str, base: str):
     exe_path = "/data/local/tmp/SoFixer"
     dump_path = "/data/local/tmp/" + so_name
-    fix_path = dump_path + "_fix.so"
+    fix_path = os.path.splitext(dump_path)[0] + "_fix.so"
     if arch == "arm":
         os.system("adb push android/SoFixer32 " + exe_path)
     elif arch == "arm64":

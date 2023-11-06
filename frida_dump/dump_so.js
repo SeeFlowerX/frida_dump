@@ -24,6 +24,7 @@ function hook_dlopen(target_so, symbol) {
 }
 
 function dump_so(target_so) {
+    log(`[dump_so] ${JSON.stringify(Process.findModuleByName("libc.so"))}`);
     let libso = Process.findModuleByName(target_so);
     if (libso == null) {
         log(`[dump_so] findModuleByName for ${target_so} failed!`);

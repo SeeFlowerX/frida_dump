@@ -7,5 +7,6 @@ class CmdArgs:
         self.runtime = None # type: str
         self.log_level = None # type: str
         self.spawn = None # type: bool
+        self.shell = None # type: bool
         self.sofixer = None # type: bool
         self.TARGET = None # type: str

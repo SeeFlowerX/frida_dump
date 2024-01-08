@@ -1,8 +1,10 @@
 import os
+import re
 import sys
-import frida
+import time
 import signal
 import logging
+import subprocess
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -76,9 +78,95 @@ def on_message(message: dict, data: bytes, base_name: str, sofixer: bool):
             logger.debug(message['payload'])
 
 
-def handle_exit(signum, frame, script: frida.core.Script):
+def handle_exit(signum, frame, script: 'frida.core.Script'):
     script.unload()
     sys.exit('hit handle_exit, go exit')
+
+def run_cmd(cmd: str, show_cmd: bool = False):
+    if show_cmd:
+        print('[*] run_cmd:', cmd)
+    output = subprocess.check_output(['adb', 'shell', cmd], shell=False)
+    return output.decode('utf-8')
+
+
+def shell_dump(args: CmdArgs):
+    result = run_cmd('readelf -s /system/bin/linker64 | grep __dl__ZL6solist')
+    solist_offset = int(result.strip().split(' ')[1], base=16)
+    
+    result = run_cmd(f'pidof {args.attach_name}')
+    target_pid = result.strip()
+
+    os.system(f'adb shell su -c "kill -SIGSTOP {target_pid}"')
+    
+    result = run_cmd(f'su -c "cat /proc/{target_pid}/maps | grep linker64"')
+    result_str = result.strip().splitlines()[0].split('-')[0]
+    linker_base = int(result_str, base=16)
+    
+    result = run_cmd(f'su -c "cat /proc/{target_pid}/maps | grep {args.TARGET[0]}"')
+    result_str = result.strip().splitlines()[0].split('-')[0]
+    target_base = int(result_str, base=16)
+
+    solist_addr = linker_base + solist_offset
+
+    print(f'[+] solist:{solist_addr:#x} target:{target_base:#x}')
+
+    result = run_cmd(f'su -c "xxd -p -l 8 -s {solist_addr:#x} /proc/{target_pid}/mem"')
+    solist_head = int.from_bytes(bytes.fromhex(result), byteorder='little')
+    print(f'[*] solist head:{solist_head:#x}')
+
+    ptr_size = 8
+    off_base = 0x10
+    off_size = 0x18
+    off_next = 0x28
+
+    result = run_cmd(f'su -c "xxd -p -l 256 -s {solist_head:#x} /proc/{target_pid}/mem"')
+    soinfo_raw = bytes.fromhex(result)
+    soinfo_base = int.from_bytes(soinfo_raw[off_base:off_base + ptr_size], byteorder='little')
+    soinfo_next = int.from_bytes(soinfo_raw[off_next:off_next + ptr_size], byteorder='little')
+    print(f'[*] first soinfo base:{soinfo_base:#x} next:{soinfo_next:#x}')
+
+    result = run_cmd(f'su -c "dd if=/proc/{target_pid}/mem of=/data/local/tmp/soinfo iflag=skip_bytes skip={soinfo_next:#x} bs=1K count={256}"')
+    # print('[+] dd result:', result)
+
+    os.system('adb pull /data/local/tmp/soinfo')
+    os.system('adb shell su -c "rm /data/local/tmp/soinfo"')
+
+    target_pattern = target_base.to_bytes(8, byteorder='little')
+    soinfo_path = Path('soinfo')
+    soinfo_raw = soinfo_path.read_bytes()
+    soinfo_size = 0
+    for item in re.finditer(target_pattern, soinfo_raw):
+        offset = item.start() + ptr_size
+        soinfo_size = int.from_bytes(soinfo_raw[offset:offset + ptr_size], byteorder='little')
+        print('[+] soinfo_size', soinfo_size)
+
+        # 可能有多个 一般第一个是对的
+        break
+
+    soinfo_path.unlink()
+
+    if soinfo_size > 0:
+
+        arch = 'arm64'
+        dump_so = 'dump_so'
+        base = hex(target_base)
+        size = str(soinfo_size)
+
+        result = run_cmd(f'su -c "dd if=/proc/{target_pid}/mem of=/data/local/tmp/{dump_so} iflag=skip_bytes skip={target_base:#x} bs={soinfo_size} count=1"')
+        # print('[+] dd result:', result)
+
+        os.system(f'adb pull /data/local/tmp/{dump_so}')
+        os.system(f'adb shell su -c "rm /data/local/tmp/{dump_so}"')
+
+        base_name = os.path.splitext(args.TARGET[0])[0]
+        save_name = base_name + "_" + base + "_" + size + "_fix.so"
+        if args.sofixer:
+            fix_so_name = use_sofixer(arch, save_name, dump_so, base)
+        else:
+            fix_so_name = use_fixso(arch, save_name, dump_so, base)
+        print(f'[+] {fix_so_name}')
+    
+    os.system(f'adb shell su -c "kill -SIGCONT {target_pid}"')
 
 def main():
     # <------ 正文 ------>
@@ -92,6 +180,7 @@ def main():
     parser.add_argument('-h', '--help', action='store_true', help='print help message and exit')
     parser.add_argument('-s', '--sofixer', action='store_true', help='use SoFixer, default use fixso')
     parser.add_argument('-f', '--spawn', action='store_true', help='spawn file')
+    parser.add_argument('--shell', action='store_true', help='shell mode')
     parser.add_argument('-n', '--attach-name', help='attach to NAME')
     parser.add_argument('-p', '--attach-pid', help='attach to PID')
     parser.add_argument('-H', '--host', help='connect to remote frida-server on HOST')
@@ -106,6 +195,8 @@ def main():
         parser.print_help()
         sys.exit()
     assert len(args.TARGET) > 0, 'plz set target'
+    if args.shell:
+        return shell_dump(args)
     if args.attach_name is None and args.attach_pid is None:
         sys.exit('set NAME or PID, plz')
     if args.attach_name and args.attach_pid:
@@ -118,6 +209,7 @@ def main():
     if args.attach_pid:
         target = args.attach_pid
     try:
+        import frida
         if args.host:
             device = frida.get_device_manager().add_remote_device(args.host)
         else:

@@ -103,8 +103,20 @@ def shell_dump(args: CmdArgs):
     linker_base = int(result_str, base=16)
     
     result = run_cmd(f'su -c "cat /proc/{target_pid}/maps | grep {args.TARGET[0]}"')
-    result_str = result.strip().splitlines()[0].split('-')[0]
-    target_base = int(result_str, base=16)
+    result_lines = result.strip().splitlines()
+    target_base = None
+    target_end = None
+    for index, line in enumerate(result_lines):
+        base_end = line.split(' ')[0]
+        if index == 0:
+            target_base = int(base_end.split('-')[0], base=16)
+        if index == len(result_lines) - 1:
+            target_end = int(base_end.split('-')[1], base=16)
+    if target_base is None:
+        sys.exit('can not get target base')
+    if target_end is None:
+        sys.exit('can not get target end')
+    target_size = target_end - target_base
 
     solist_addr = linker_base + solist_offset
 
@@ -140,10 +152,18 @@ def shell_dump(args: CmdArgs):
         soinfo_size = int.from_bytes(soinfo_raw[offset:offset + ptr_size], byteorder='little')
         print('[+] soinfo_size', soinfo_size)
 
+        if soinfo_size > target_size * 10:
+            print('[*] use target_size as soinfo_size', target_size)
+            soinfo_size = target_size
+
         # 可能有多个 一般第一个是对的
         break
 
     soinfo_path.unlink()
+
+    if soinfo_size == 0:
+        print('[*] use target_size as soinfo_size', target_size)
+        soinfo_size = target_size
 
     if soinfo_size > 0:
 

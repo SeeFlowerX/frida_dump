@@ -94,7 +94,7 @@ def shell_dump(args: CmdArgs):
     solist_offset = int(result.strip().split(' ')[1], base=16)
     
     result = run_cmd(f'pidof {args.attach_name}')
-    target_pid = result.strip()
+    target_pid = result.strip().split(' ')[0]
 
     os.system(f'adb shell su -c "kill -SIGSTOP {target_pid}"')
     

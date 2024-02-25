@@ -93,7 +93,7 @@ def shell_dump(args: CmdArgs):
     result = run_cmd('readelf -s /system/bin/linker64 | grep __dl__ZL6solist')
     solist_offset = int(result.strip().split(' ')[1], base=16)
     
-    result = run_cmd(f'pidof {args.attach_name}')
+    result = run_cmd(f'pidof -s {args.attach_name}')
     target_pid = result.strip()
 
     os.system(f'adb shell su -c "kill -SIGSTOP {target_pid}"')

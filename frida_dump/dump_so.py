@@ -245,7 +245,6 @@ def main():
             logger.info(f'start spawn {target}')
             pid = device.spawn(target)
             session = device.attach(pid)
-            device.resume(pid)
         else:
             logger.info(f'start attach {target}')
             session = device.attach(target)
@@ -266,6 +265,7 @@ def main():
         sys.exit()
     rpc = script.exports
     if args.spawn:
+        device.resume(pid)
         rpc.main(args.TARGET[0])
     else:
         rpc.dumpso(args.TARGET[0])
